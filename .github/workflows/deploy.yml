@@ -1,0 +1,25 @@
+name: Wysylanie strony na OVH
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wyslij pliki na OVH przez FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ftp.cluster129.hosting.ovh.net
+          username: fotokou
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          server-dir: www/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            README.md
