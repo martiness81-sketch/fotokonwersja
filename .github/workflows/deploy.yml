@@ -18,4 +18,4 @@ jobs:
         env:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          lftp -u "fotokou,$FTP_PASSWORD" sftp://ftp.cluster129.hosting.ovh.net -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob .git* --exclude-glob README.md ./ www/; bye"
+          lftp -u "fotokou,$FTP_PASSWORD" sftp://ftp.cluster129.hosting.ovh.net -e "set sftp:auto-confirm yes; mirror -R --verbose -x '^\\.git' -x '^README\\.md$' ./ www/; rm -r -f www/.git; rm -r -f www/.github; bye"
