@@ -11,15 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wyslij pliki na OVH przez FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ftp.cluster129.hosting.ovh.net
-          username: fotokou
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          server-dir: www/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            README.md
+      - name: Zainstaluj lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Wyslij pliki na OVH przez SFTP
+        env:
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -u "fotokou,$FTP_PASSWORD" sftp://ftp.cluster129.hosting.ovh.net -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob .git* --exclude-glob README.md ./ www/; bye"
