@@ -1,21 +1,58 @@
 name: Wysylanie strony na OVH
 
+# main            -> strona glowna: fotokonwersja.pl (folder www/)
+# kazda inna galaz -> podglad: fotokonwersja.pl/podglad/ (folder www/podglad/)
+# Haslo do podgladu: dodaj sekret PODGLAD_HASLO (login: podglad). Bez sekretu podglad jest bez hasla.
+
 on:
   push:
-    branches: [main]
+    branches: ['**']
   workflow_dispatch:
+    inputs:
+      galaz:
+        description: 'Galaz do podgladu (puste = wdrozenie main na strone glowna)'
+        required: false
+        default: ''
+
+concurrency:
+  group: wdrozenie-ovh
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.galaz != '') && 'podglad' || (github.ref == 'refs/heads/main' && 'strona' || 'podglad') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.galaz || github.ref }}
 
       - name: Zainstaluj lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Wyslij pliki na OVH przez SFTP
+      - name: Strona glowna (main) -> www/
+        if: env.CEL == 'strona'
         env:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
           lftp -u "fotokou,$FTP_PASSWORD" sftp://ftp.cluster129.hosting.ovh.net -e "set sftp:auto-confirm yes; mirror -R --verbose -x '^\\.git' -x '^README\\.md$' ./ www/; rm -r -f www/.git; rm -r -f www/.github; bye"
+
+      - name: Podglad -> www/podglad/
+        if: env.CEL == 'podglad'
+        env:
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          PODGLAD_HASLO: ${{ secrets.PODGLAD_HASLO }}
+        run: |
+          mkdir -p /tmp/podglad
+          rsync -a --exclude='.git*' --exclude='README.md' ./ /tmp/podglad/
+          H=/tmp/podglad/.htaccess
+          printf '%s\n' '<IfModule mod_headers.c>' '  Header set X-Robots-Tag "noindex, nofollow"' '</IfModule>' > "$H"
+          EXTRA=""
+          if [ -n "$PODGLAD_HASLO" ]; then
+            printf 'podglad:%s\n' "$(openssl passwd -apr1 "$PODGLAD_HASLO")" > /tmp/htpasswd-podglad
+            printf '%s\n' 'AuthType Basic' 'AuthName "Podglad FotoKonwersja"' 'AuthUserFile /home/fotokou/.htpasswd-podglad' 'Require valid-user' >> "$H"
+            EXTRA="put /tmp/htpasswd-podglad -o .htpasswd-podglad;"
+          fi
+          lftp -u "fotokou,$FTP_PASSWORD" sftp://ftp.cluster129.hosting.ovh.net -e "set sftp:auto-confirm yes; $EXTRA mkdir -p -f www/podglad; mirror -R --delete --verbose /tmp/podglad/ www/podglad/; bye"
+          echo "Podglad gotowy: https://fotokonwersja.pl/podglad/"
